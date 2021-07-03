@@ -372,6 +372,10 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
         _balances[account] += amount;
     }
 
+    function balanceSub(address account, uint256 amount) internal {
+        _balances[account] -= amount;
+    }
+
     /**
      * @dev See {IERC20-transfer}.
      *
@@ -501,7 +505,7 @@ pragma solidity ^0.8.0;
 
 
 
-contract TestTokenOZ is ERC20 {
+contract LuckyDoge is ERC20 {
 
     using SafeMath for uint256;
 
@@ -532,19 +536,28 @@ contract TestTokenOZ is ERC20 {
     }
 
     function _transfer(address sender, address recipient, uint256 amount) internal virtual override {
+        require(sender != address(0), "ERC20: transfer from the zero address");
+        require(recipient != address(0), "ERC20: transfer to the zero address");
+        require(balanceOf(sender) >= amount, "ERC20: transfer amount exceeds balance");
+
+        uint256 recipient_amount = amount;
+
         if (isFeeEnabled) {
-            require(balanceOf(sender) >= amount, "ERC20: transfer amount exceeds balance");
+            if (sender != _winnerFeeAddress && sender != _devFeeAddress) {
+                uint256 devFeeAmount = amount.mul(_devFee).div(100);
+                uint256 winnerFeeAmount = amount.mul(_winnerFee).div(100);
+                
+                recipient_amount = amount.sub(devFeeAmount).sub(winnerFeeAmount);
 
-            uint256 devFeeAmount = amount.mul(_devFee).div(100);
-            uint256 winnerFeeAmount = amount.mul(_winnerFee).div(100);
-
-            amount = amount.sub(devFeeAmount).sub(winnerFeeAmount);
-
-            balanceAdd(_devFeeAddress, devFeeAmount);
-            balanceAdd(_winnerFeeAddress, winnerFeeAmount);
+                balanceAdd(_devFeeAddress, devFeeAmount);
+                balanceAdd(_winnerFeeAddress, winnerFeeAmount);
+            }
         }
 
-        super._transfer(sender, recipient, amount);
+        balanceSub(sender, amount);
+        balanceAdd(recipient, recipient_amount);
+
+        emit Transfer(sender, recipient, recipient_amount);
     }
 
     /**
