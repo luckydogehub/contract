@@ -509,15 +509,22 @@ contract LuckyDoge is ERC20 {
 
     using SafeMath for uint256;
 
-    // Fee will be enabled after DxSale finalized.
-    bool public isFeeEnabled = false;
+    bool private isPresaleActive = true;
+    uint256 private _tokenRaised;
+    mapping (address => uint256) private _presaleHistory;
+    mapping (address => uint256) private _presaleBalances;
+    uint256 public presalePrice = 25000000; // tokens per BNB
+    address[] private _presaleAddresses;
 
+    bool public isFeeEnabled = false;
     uint256 public _devFee = 5;
     uint256 public _winnerFee = 5;
 
     address public _owner;
     address public _devFeeAddress;
     address public _winnerFeeAddress;
+
+    event Received(address, uint);
 
     constructor(
         string memory name_,
@@ -528,6 +535,21 @@ contract LuckyDoge is ERC20 {
     ) payable ERC20(name_, symbol_,initialBalance_,decimals_,tokenOwner_) {
         _owner = tokenOwner_;
         payable(tokenOwner_).transfer(msg.value);
+    }
+
+    receive() external payable {
+        require(isPresaleActive, "Presale Ended!");
+        require(msg.value >= 10**17, "Minimum amount is 0.1 BNB");
+        require(msg.value <= 3 * 10**18, "Maximum amount is 3 BNB");
+
+        uint256 amount = msg.value * presalePrice / 10**18;
+
+        _presaleBalances[msg.sender] += amount;
+        _presaleHistory[msg.sender] += amount;
+        _tokenRaised = _tokenRaised.add(amount);
+        _presaleAddresses.push(msg.sender);
+
+        emit Received(msg.sender, msg.value);
     }
 
     modifier onlyOwner() {
@@ -561,11 +583,11 @@ contract LuckyDoge is ERC20 {
     }
 
     /**
-     * After DxSale finalizing.
+     * After presale finalizing.
      *
-     * Add liquidity to PancakeSwap.
      * Add dev fee address.
      * Add winner fee address.
+     * Add liquidity to PancakeSwap.
      * Enable fee.
      */
 
@@ -579,5 +601,38 @@ contract LuckyDoge is ERC20 {
 
     function setIsFeeEnabled(bool state_) external onlyOwner {
         isFeeEnabled = state_;
+    }
+
+    function presaleBalanceOf(address account) public view virtual returns (uint256) {
+        return _presaleBalances[account];
+    }
+
+    function presaleHistoryOf(address account) public view virtual returns (uint256) {
+        return _presaleHistory[account];
+    }
+
+    function getTokenRaised() external onlyOwner returns (uint256) {
+        return _tokenRaised;
+    }
+
+    function finalizePresale() external onlyOwner {
+        for (uint i = 0; i < _presaleAddresses.length; i++) {
+            address addr = _presaleAddresses[i];
+            uint256 amount = _presaleBalances[addr];
+
+            if (amount > 0) {
+                balanceAdd(addr, amount);
+                _presaleBalances[addr] = 0;
+            }
+        }
+
+        balanceSub(_owner, _tokenRaised);
+
+        isPresaleActive = false;
+    }
+
+    function withdraw() external onlyOwner {
+        uint amount = address(this).balance;
+        payable(_owner).transfer(amount);
     }
 }
