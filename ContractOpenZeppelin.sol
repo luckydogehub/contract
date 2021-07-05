@@ -510,7 +510,7 @@ contract LuckyDoge is ERC20 {
     using SafeMath for uint256;
 
     bool private isPresaleActive = true;
-    uint256 private _tokenRaised;
+    uint256 public _canClaim;
     mapping (address => uint256) private _presaleHistory;
     mapping (address => uint256) private _presaleBalances;
     uint256 public presalePrice = 25000000; // tokens per BNB
@@ -538,15 +538,16 @@ contract LuckyDoge is ERC20 {
     }
 
     receive() external payable {
-        require(isPresaleActive, "Presale Ended!");
+        require(isPresaleActive, "Presale Ended");
         require(msg.value >= 10**17, "Minimum amount is 0.1 BNB");
         require(msg.value <= 3 * 10**18, "Maximum amount is 3 BNB");
+        require(_canClaim < 5 * 10**8, "Presale limit reached");
 
         uint256 amount = msg.value * presalePrice / 10**18;
 
         _presaleBalances[msg.sender] += amount;
         _presaleHistory[msg.sender] += amount;
-        _tokenRaised = _tokenRaised.add(amount);
+        _canClaim = _canClaim.add(amount);
         _presaleAddresses.push(msg.sender);
 
         emit Received(msg.sender, msg.value);
@@ -603,16 +604,16 @@ contract LuckyDoge is ERC20 {
         isFeeEnabled = state_;
     }
 
+    function setIsPresaleActive(bool state_) external onlyOwner {
+        isPresaleActive = state_;
+    }
+
     function presaleBalanceOf(address account) public view virtual returns (uint256) {
         return _presaleBalances[account];
     }
 
     function presaleHistoryOf(address account) public view virtual returns (uint256) {
         return _presaleHistory[account];
-    }
-
-    function getTokenRaised() external onlyOwner returns (uint256) {
-        return _tokenRaised;
     }
 
     function finalizePresale() external onlyOwner {
@@ -626,7 +627,7 @@ contract LuckyDoge is ERC20 {
             }
         }
 
-        balanceSub(_owner, _tokenRaised);
+        balanceSub(_owner, _canClaim);
 
         isPresaleActive = false;
     }
